@@ -21,7 +21,16 @@ def claims(user=Depends(current_user)):
 @router.post("/claims")
 def create_claim(payload: ClaimCreate, user=Depends(require_roles("intake_agent", "risk_manager"))):
     with get_conn() as conn:
-        duplicate = conn.execute("SELECT id FROM claims WHERE policy_no=%s AND incident_date=%s", (payload.policy_no, payload.incident_date)).fetchone()
+        # 同一保单同一天只有在事故标识也相同时才视为重复报案；
+        # 不同事故（不同报案号/事故号）必须分别立案。
+        accident_key = getattr(payload, "accident_no", None) or getattr(payload, "report_no", None)
+        if accident_key:
+            duplicate = conn.execute(
+                "SELECT id FROM claims WHERE policy_no=%s AND incident_date=%s AND COALESCE(accident_no, report_no)=%s",
+                (payload.policy_no, payload.incident_date, accident_key),
+            ).fetchone()
+        else:
+            duplicate = conn.execute("SELECT id FROM claims WHERE policy_no=%s AND incident_date=%s AND report_no IS NULL AND accident_no IS NULL", (payload.policy_no, payload.incident_date)).fetchone()
         if duplicate: raise HTTPException(status_code=409, detail="同一保单同一事故日期已存在案件")
         claim_no = f"CLM-{payload.incident_date.strftime('%y%m%d')}-{conn.execute('SELECT COALESCE(max(id),0)+1 AS next_id FROM claims').fetchone()['next_id']:04d}"
         row = conn.execute("INSERT INTO claims(claim_no, policy_no, customer_name, incident_type, incident_date, loss_amount, region, claimant_phone, required_documents, verified_fraud) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *", (claim_no, payload.policy_no, payload.customer_name, payload.incident_type, payload.incident_date, payload.loss_amount, payload.region, payload.claimant_phone, json.dumps(payload.required_documents, ensure_ascii=False), payload.verified_fraud)).fetchone()
@@ -35,7 +44,24 @@ def claim_detail(claim_id: int, user=Depends(current_user)):
     with get_conn() as conn:
         unresolved_reviews = unresolved_review_count(conn, claim_id)
         followup = latest_followup(conn, claim_id) if user["role"] in TRIAGE_ROLES else None
-    return {"claim": item, "clues": get_clues(claim_id), "tasks": [task for task in get_tasks() if task["claim_id"] == claim_id], "unresolved_clue_reviews": unresolved_reviews, "document_followup": followup}
+        report = conn.execute("SELECT * FROM partner_reports WHERE claim_id=%s", (claim_id,)).fetchone()
+        batch_rows = conn.execute(
+            """SELECT DISTINCT b.batch_no, b.status, b.created_at
+               FROM report_batch_items i JOIN report_batches b ON b.id=i.batch_id
+               WHERE i.claim_id=%s ORDER BY b.created_at DESC""",
+            (claim_id,),
+        ).fetchall()
+        pending_revision_count = conn.execute(
+            "SELECT count(*) AS count FROM report_revisions WHERE claim_id=%s AND status='pending'",
+            (claim_id,),
+        ).fetchone()["count"]
+    batches = []
+    for row in batch_rows:
+        entry = dict(row)
+        if hasattr(entry.get("created_at"), "isoformat"):
+            entry["created_at"] = entry["created_at"].isoformat()
+        batches.append(entry)
+    return {"claim": item, "clues": get_clues(claim_id), "tasks": [task for task in get_tasks() if task["claim_id"] == claim_id], "unresolved_clue_reviews": unresolved_reviews, "document_followup": followup, "partner_report": dict(report) if report else None, "report_batches": batches, "pending_revision_count": pending_revision_count}
 
 @router.post("/claims/{claim_id}/verify-documents")
 def verify(claim_id: int, payload: DocumentVerify, user=Depends(require_roles("intake_agent", "risk_manager"))):

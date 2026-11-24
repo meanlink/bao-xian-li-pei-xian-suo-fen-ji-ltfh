@@ -12,3 +12,16 @@ export const clueEvidenceSource = {official_record:'官方记录', original_medi
 export const clueReviewClaimStatuses = ['investigating', 'adjudicating'];
 
 export function canTriage(role){return role === 'intake_agent' || role === 'risk_manager'}
+
+export const batchItemStatus = {
+  created: {label: '新立案', cls: 'badge-mint'},
+  updated: {label: '修订已受理', cls: 'badge-blue'},
+  duplicate: {label: '重复报送', cls: 'badge-gray'},
+  stale_revision: {label: '旧修订忽略', cls: 'badge-amber'},
+  pending_confirmation: {label: '待人工确认', cls: 'badge-amber'},
+  conflict: {label: '内容冲突', cls: 'badge-red'},
+  invalid: {label: '校验不通过', cls: 'badge-red'},
+  not_processed: {label: '整批退回未处理', cls: 'badge-gray'},
+};
+export const batchStatus = {accepted: {label: '已受理', cls: 'badge-mint'}, rejected: {label: '整批退回', cls: 'badge-red'}};
+export function batchBadge(status){const m = batchItemStatus[status] || batchStatus[status]; return m || {label: status, cls: 'badge-gray'};}

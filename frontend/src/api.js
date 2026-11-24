@@ -5,7 +5,12 @@ export async function api(path, options = {}) {
   if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`${API}${path}`, {...options, headers});
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.detail || '请求失败');
+  if (!response.ok) {
+    const err = new Error(typeof data.detail === 'string' ? data.detail : (data.reject_reason || '请求失败'));
+    err.status = response.status;
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 export const get = path => api(path);

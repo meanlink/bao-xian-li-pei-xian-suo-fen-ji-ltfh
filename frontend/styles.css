@@ -49,3 +49,31 @@
 .triage-error{margin:0;color:oklch(44% .16 25)}
 @media(max-width:950px){.triage-row{grid-template-columns:1fr 1fr}.triage-actions{justify-items:start}}
 @media(max-width:550px){.triage-row{grid-template-columns:1fr}.triage-date{display:none}}
+
+/* ===== 合作方批次报案 ===== */
+.btn-sm{padding:6px 12px;font-size:12px;border-radius:8px}
+.link-btn{background:none;border:0;color:var(--blue);font-weight:700;padding:0;text-decoration:underline;cursor:pointer}
+.batch-item-row{padding:14px;margin-bottom:12px;background:var(--paper);box-shadow:none;border:1px solid var(--line)}
+.batch-row-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.batch-row-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 12px}
+.batch-row-grid .field{margin:0}
+.batch-lookup{display:flex;gap:10px}
+.batch-input{flex:1;padding:10px 13px;border:1px solid var(--line);border-radius:9px;background:#fff;min-width:0}
+.batch-input:focus{outline:2px solid rgba(49,94,251,.18);border-color:var(--blue)}
+.batch-chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.batch-chip{display:inline-flex;align-items:center;gap:7px;background:#f1f4fb;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:12px;font-weight:700;color:var(--ink)}
+.batch-chip:hover{border-color:var(--blue);color:var(--blue)}
+.receipt-card{border:1px solid var(--line);border-radius:14px;padding:16px;background:#fff}
+.receipt-json{background:#0f1b30;color:#cdd9f2;padding:14px;border-radius:10px;overflow:auto;max-height:340px;font-size:11px;line-height:1.55;margin-top:10px}
+.pending-list{display:grid;gap:12px}
+.pending-card{border:1px solid #f0d9b8;background:#fffaf2;border-radius:12px;padding:14px}
+.diff-box{margin-top:10px;display:grid;gap:5px}
+.diff-line{display:flex;gap:8px;align-items:center;font-size:13px}
+.diff-line > span:first-child{width:42px;color:var(--muted);flex:none}
+.diff-old{color:var(--red);text-decoration:line-through;word-break:break-all}
+.diff-new{color:var(--mint);font-weight:700;word-break:break-all}
+@media (max-width:1100px){.batch-row-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:680px){.batch-row-grid{grid-template-columns:1fr}.batch-lookup{flex-direction:column}}
+.pending-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.pending-actions .btn{flex:0 0 auto}
+.batch-form-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0}

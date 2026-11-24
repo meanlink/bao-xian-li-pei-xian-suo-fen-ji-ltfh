@@ -47,3 +47,32 @@ docker compose exec -T backend python scripts/seed_demo.py
 案件、风险与调查任务枚举在 `backend/src/constants/enums.py` 和 `frontend/src/utils/constants.js`。线索状态、凭证来源和复核状态用于 `backend/migrations/001_schema.sql`、`backend/migrations/002_clue_reviews.sql`、`backend/src/schemas/clue_reviews.py` 和 `frontend/src/utils/constants.js`。
 
 补件渠道 `phone / sms / email` 见 `backend/migrations/003_document_followups.sql`、`backend/src/schemas/claims.py` 与 `frontend/src/pages/documentTriage.js`。队列状态由 `backend/src/services/document_triage_service.py` 计算，前端负责展示与筛选。
+
+## 合作方批次报案
+
+受理员打开「批次报案」按批录入或粘贴报送批次，也可在案件详情的「批次报案回执」按批次号回查。迁移 `backend/migrations/004_batch_reports.sql` 幂等建表，旧库重启自动升级。
+
+业务规则与接口（前缀 `/api` 由 nginx 去掉，直接访问后端不带 `/api`）：
+
+- `POST /report-batches`（别名 `/batches`）：整批报送。每条含 `report_no`（报案号）与 `revision_no`（修订号，从 1 开始），字段同时兼容 `reportNo/revision`、中文键等常见命名；`batch_no` 为合作方批次号，留空自动生成。
+- 同一保单同一天的不同事故使用不同报案号，分别生成不同案件；不会按「保单号 + 出险日期」合并。
+- 整批先校验后受理：任一条目字段不合法，或出现「报案号 + 修订号」相同但内容指纹不同（含同批内或与已接收资料冲突），整批返回 `409/status=rejected`，本批所有条目均不立案，并持久化可查询的退回回执与逐条 `conflict/invalid/not_processed` 结果。
+- 相同 `batch_no` 与相同报文重试，返回原回执并带 `replayed=true`；换批次号重发相同条目返回 `duplicate`，均不重复立案。并发同批次由事务咨询锁串行化。
+- 乱序到达的旧修订（`revision_no` 小于已生效版本）只产生 `stale_revision` 结果，不覆盖案件现有资料。
+- 新修订到达已分级案件（已有 `risk_level` 或状态为 `modeled/investigating/adjudicating/closed`）时不直接覆盖，写入 `report_revisions.status=pending` 人工确认队列，逐条结果为 `pending_confirmation`。受理事务与 `model_claim` 分级事务都对 `claims` 行 `SELECT ... FOR UPDATE` 并在锁内复检分级状态，并发下同样遵守该规则。
+- `GET /report-batches/{batch_no}`（别名 `/batches/{batch_no}`）取原回执（`original_receipt/request_payload`）与逐条处理结果；`GET /report-batches` 列批次；`GET /claims/{id}` 附带 `partner_report`、`report_batches` 与 `pending_revision_count`。
+- `GET /report-revisions/pending`（别名 `/revision-requests`）、`POST /report-revisions/{id}/confirm|reject` 处理人工确认；采纳时可传 `{"regrade": true}` 清空旧分级并要求重新分级。
+- `GET /partner-reports/{report_no}` 查报案号台账与全部修订。
+
+报送示例（经前端代理用 `http://localhost:18244/api/report-batches`，直连后端用 `http://localhost:19244/report-batches`，需带登录 Bearer Token）：
+
+```bash
+curl -X POST http://localhost:19244/report-batches \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"batch_no":"B-20261124-0001","partner_code":"HUADONG","items":[
+    {"report_no":"RPT-0001","revision_no":1,"accident_no":"ACC-A","policy_no":"PA-88","customer_name":"张三","incident_type":"车损","incident_date":"2026-11-20","loss_amount":12000,"region":"都市","claimant_phone":"13800000001"},
+    {"report_no":"RPT-0002","revision_no":1,"accident_no":"ACC-B","policy_no":"PA-88","customer_name":"李四","incident_type":"车损","incident_date":"2026-11-20","loss_amount":8000,"region":"都市","claimant_phone":"13800000002"}]}'
+```
+
+逐条结果状态：`created / updated / duplicate / stale_revision / pending_confirmation / conflict / invalid / not_processed`。回归见 `backend/tests/test_batch_reports.py`（需要 PostgreSQL，缺库时自动 skip）。
+
